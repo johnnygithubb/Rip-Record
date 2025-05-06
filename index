@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Link2Wave</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+<style>
+  .pitch-controls {
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 5px;
+    margin-top: 15px;
+    border: 1px solid #ddd;
+  }
+  .export-controls {
+    background-color: #f0f9ff;
+    padding: 15px;
+    border-radius: 5px;
+    margin-top: 15px;
+    border: 1px solid #bde5f8;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎵 Link2Wave</h1>
+    
+    <div class="tabs">
+      <div class="tab active" data-tab="ytripper">YouTube Ripper</div>
+      <div class="tab" data-tab="vocalbooth">🎙️ Vocal Booth</div>
+    </div>
+    
+    <div id="ytripper" class="tab-content active">
+      <h2>YouTube Audio Ripper</h2>
+      <form id="ripForm" action="/rip" method="post">
+        <label>
+          YouTube URL:
+          <input type="text" name="url" required placeholder="https://youtube.com/watch?v=..." />
+        </label>
+        <label>
+          Format:
+          <select name="format">
+            <option value="mp3">MP3</option>
+            <option value="wav">WAV</option>
+          </select>
+        </label>
+        <button type="submit">Download</button>
+      </form>
+      
+      <div id="ripStatus"></div>
+      
+      <div id="stemSection" style="display:none; margin-top: 20px;">
+        <h3>Audio Stems</h3>
+        <button id="separateBtn">Separate Audio</button>
+        <div id="stems"></div>
+      </div>
+    </div>
+    
+    <div id="vocalbooth" class="tab-content">
+      <h2>🎙️ Vocal Booth</h2>
+
+      <div class="controls">
+        <button id="armBtn">🎚️ Arm Mic</button>
+        <button id="recBtn" disabled>⏺️ Record</button>
+        <button id="stopBtn" disabled>⏹️ Stop</button>
+        <button id="downloadBtn" disabled>💾 Download Take</button>
+      </div>
+
+      <section class="fx">
+        <h3>Live FX</h3>
+
+        <label>Input Gain
+          <input type="range" id="gain" min="0" max="2" value="1" step="0.01" />
+        </label>
+
+        <label>EQ — Low Shelf (dB ±15)
+          <input type="range" id="eqLow" min="-15" max="15" value="0" step="0.1" />
+        </label>
+
+        <label>EQ — High Shelf (dB ±15)
+          <input type="range" id="eqHigh" min="-15" max="15" value="0" step="0.1" />
+        </label>
+
+        <label>Reverb Mix (%)
+          <input type="range" id="reverbMix" min="0" max="1" value="0.25" step="0.01" />
+        </label>
+
+        <label>Delay Time (ms)
+          <input type="range" id="delayTime" min="0" max="700" value="0" step="10" />
+        </label>
+
+        <label>Compressor Threshold (dB)
+          <input type="range" id="compThresh" min="-60" max="0" value="-24" step="1" />
+        </label>
+      </section>
+
+      <audio id="playback" controls style="width:100%; display:none;"></audio>
+      <p id="status"></p>
+      
+      <!-- New export controls section -->
+      <section class="export-controls" style="display:none;">
+        <h3>Export Options</h3>
+        <label>
+          Export Format:
+          <select id="exportFormat">
+            <option value="wav">WAV</option>
+            <option value="mp3">MP3</option>
+          </select>
+        </label>
+        <button id="exportBtn" disabled>Export Recording</button>
+      </section>
+      
+      <!-- New pitch processing controls -->
+      <section id="pitchControls" class="pitch-controls" style="display:none;">
+        <h3>Pitch Processing</h3>
+        <label>
+          Pitch Adjustment (semitones):
+          <input type="range" id="pitchShift" min="-12" max="12" value="0" step="1">
+          <span id="pitchValue">0</span>
+        </label>
+        <div class="pitch-buttons">
+          <button id="pitchShiftBtn">Apply Pitch Shift</button>
+          <button id="autotuneBtn">Apply Autotune</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+<script>
+  // Tab functionality
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Remove active class from all tabs and content
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      // Add active class to clicked tab and corresponding content
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).classList.add('active');
+    });
+  });
+  
+  // Handle YouTube ripping form
+  document.getElementById('ripForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const url = form.url.value;
+    const format = form.format.value;
+    const status = document.getElementById('ripStatus');
+    
+    status.innerHTML = '<p>Downloading... (this may take a while)</p>';
+    
+    try {
+      const response = await fetch('/rip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, format })
+      });
+      
+      const data = await response.json();
+      if (data.status === 'ok') {
+        status.innerHTML = `<p>✅ Downloaded: ${data.filename}</p>`;
+        document.getElementById('stemSection').style.display = 'block';
+        document.getElementById('separateBtn').onclick = () => {
+          separateAudio(data.filepath);
+        };
+      } else {
+        status.innerHTML = `<p>❌ Error: ${data.error}</p>`;
+      }
+    } catch (error) {
+      status.innerHTML = `<p>❌ Error: ${error.message}</p>`;
+    }
+  });
+  
+  async function separateAudio(filepath) {
+    const status = document.getElementById('ripStatus');
+    const stems = document.getElementById('stems');
+    
+    status.innerHTML += '<p>Separating audio into stems... (this may take a while)</p>';
+    
+    try {
+      const response = await fetch('/separate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filepath })
+      });
+      
+      const data = await response.json();
+      if (data.status === 'ok') {
+        status.innerHTML += '<p>✅ Separation complete!</p>';
+        
+        stems.innerHTML = '<h4>Available Stems:</h4><ul>';
+        data.stems.forEach(stem => {
+          stems.innerHTML += `
+            <li>
+              ${stem.name}
+              <button onclick="playStem('${stem.path}')">▶️ Play</button>
+              <button onclick="saveStem('${stem.path}')">💾 Save</button>
+            </li>
+          `;
+        });
+        stems.innerHTML += '</ul>';
+      } else {
+        status.innerHTML += `<p>❌ Error: ${data.error}</p>`;
+      }
+    } catch (error) {
+      status.innerHTML += `<p>❌ Error: ${error.message}</p>`;
+    }
+  }
+  
+  async function playStem(path) {
+    fetch(`/play?path=${encodeURIComponent(path)}`);
+  }
+  
+  async function saveStem(path) {
+    const response = await fetch(`/save-stem?path=${encodeURIComponent(path)}`);
+    const data = await response.json();
+    alert(data.message);
+  }
+  
+  // Show pitch value when slider changes
+  if (document.getElementById('pitchShift')) {
+    document.getElementById('pitchShift').addEventListener('input', function() {
+      document.getElementById('pitchValue').textContent = this.value;
+    });
+  }
+  
+  // Show export controls when recording is complete
+  function showExportControls() {
+    document.querySelector('.export-controls').style.display = 'block';
+  }
+  
+  // When a recording is completed, show the export controls
+  document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('stopBtn')) {
+      document.getElementById('stopBtn').addEventListener('click', function() {
+        setTimeout(function() {
+          showExportControls();
+        }, 1500); // Short delay to allow recording to complete
+      });
+    }
+  });
+</script>
+</body>
+</html>
