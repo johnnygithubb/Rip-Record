@@ -1,0 +1,15 @@
+torch>=2.0.0
+simpleaudio>=1.0.4
+yt-dlp>=2023.0.0
+demucs>=4.0.0
+flask>=3.0.0
+pyopenssl>=24.0.0  # For ssl_context="adhoc"
+werkzeug>=3.0.0
+blinker>=1.6.2  # Required for Flask signals 
+numpy>=1.20.0
+# For pitch processing:
+sounddevice>=0.4.5
+soundfile>=0.12.1
+librosa>=0.10.0
+# Optional dependencies:
+# aubio>=0.4.9  # For advanced pitch processing, but requires compilation
